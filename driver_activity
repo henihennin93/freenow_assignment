@@ -1,0 +1,97 @@
+  create table curated.drivers_activity as
+with date_generate as(
+    select generate_series(date '2021-06-01', date '2021-06-14', interval '1 day')::date as daily_date
+),
+
+driver as (
+    select distinct id as driver_id
+    FROM curated.freenow_drivers
+    union
+    select distinct driver_id
+    FROM curated.freenow_offers
+    union
+    select
+    distinct driver_id FROM curated.freenow_bookings
+),
+orphan_drivers as (
+select d.driver_id,
+case when id is null then True
+     else FALSE
+     end as orphan_driver
+from driver d
+left join curated.freenow_drivers fd on d.driver_id=fd.id),
+
+days_drivers as(
+select d.driver_id,
+       ds.daily_date
+from driver d
+cross join date_generate ds)
+
+,offers_per_day as(
+select
+     created_date ,
+    driver_id,
+    count(distinct id ) as total_offers,
+    count(distinct case when state='CANCELED' then id end) as cancelled_offers,
+    count(distinct case when state='ACCEPTED' then id end) as accepted_offers,
+    count(distinct case when read_driver=true then id end) as read_by_drive_offers,
+    count(distinct case when read_driver=false then id end) as not_read_by_drive_offers,
+    round(avg(route_distance)::numeric,2) as avg_route_distance,
+    sum(route_distance) as total_route_distance
+from curated.freenow_offers
+group by driver_id, created_date ),
+
+bookings_per_day as(
+select  request_date ,
+         driver_id,
+         count(distinct id) as total_bookings,
+         count(distinct case when status='DRIVER_ABORT' then id end) as driver_abrot_booking,
+         count(distinct case when status='NO_DRIVER_FOUND' then id end) as no_driver_found_booking,
+         count(distinct case when status='PASSENGER_ABORT' then id end) as passenger_abort_booking,
+         count(distinct case when status='SERVER_ABORT' then id end) as server_abort_booking,
+         count(distinct case when status='SUCCESS' then id end) as success_booking,
+         sum(estimated_route_fare) as total_estimated_route_fare
+
+from curated.freenow_bookings
+group by request_date ,2)
+select
+       dg.daily_date,
+       dg.driver_id,
+       fd.country,
+       fd.rating,
+       fd.date_registration,
+       fd.receive_marketing,
+       pod.total_offers,
+       pod.cancelled_offers,
+       pod.accepted_offers,
+       pod.read_by_drive_offers,
+       pod.not_read_by_drive_offers,
+       pod.avg_route_distance,
+       pod.total_route_distance,
+       bpd.total_bookings,
+       bpd.driver_abrot_booking,
+       bpd.no_driver_found_booking,
+       bpd.passenger_abort_booking,
+       bpd.server_abort_booking,
+       bpd.success_booking,
+       bpd.total_estimated_route_fare,
+       orphan_driver
+
+from days_drivers dg
+left join offers_per_day pod on dg.daily_date=pod.created_date and dg.driver_id=pod.driver_id
+left join  bookings_per_day bpd on dg.daily_date=bpd.request_date and dg.driver_id=bpd.driver_id
+left join curated.freenow_drivers fd on pod.driver_id=fd.id
+left join orphan_drivers od on dg.driver_id=od.driver_id
+where daily_date is not null and dg.driver_id is not null
+
+
+;
+
+
+ALTER TABLE curated.drivers_activity
+    ADD CONSTRAINT drivers_activity_pk PRIMARY KEY (daily_date, driver_id);
+
+
+
+
+
