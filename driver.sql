@@ -2,7 +2,7 @@ CREATE TABLE curated.freenow_drivers AS
 with main_query as(
 select
 id,
-row_number() over (partition by  id) as rank,
+row_number() over (partition by  id order by date_registration) as rank,
 case when country in ('FRANCE','FR','France') then 'france'
      when country in ('Austria','AT','AUSTRIA','Österreich') then 'austria'
 end as country,

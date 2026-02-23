@@ -2,7 +2,7 @@ create table curated.freenow_offers as
 with raw_data as (
 select
         id,
-        row_number() over (partition by  id) as rank,
+        row_number() over (partition by  id order by datecreated) as rank,
         trim(datecreated)::date as created_date,
         nullif(bookingid,'null') as booking_id,
         nullif(driverid,'null') as driver_id,
